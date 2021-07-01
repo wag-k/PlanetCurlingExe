@@ -108,6 +108,9 @@ class MotionSimulationState {
       planet.entity.modified();
     });
   }
+  playerDrag(ev){
+    
+  }
 }
 
 /**
@@ -122,12 +125,18 @@ class DirectionSelectState {
   }
   
   stateChanged(){
-    this.startPos = this.planet1.pos.clone();
-
   }
 
   update(){
+  }
+
+  playerDrag(ev){
     const deltaTime = Setting.TimeStepSec;
+    var deltaX = ev.startDelta.x;
+    var deltaY = ev.startDelta.y;
+    var velocityPerPx = - this.universe.worldWidthMeter/deltaTime/g.game.width/100;
+    this.universe.planets[0].velocity.x = velocityPerPx*deltaX;
+    this.universe.planets[0].velocity.y = velocityPerPx*deltaY;
   }
 }
 
@@ -147,7 +156,8 @@ class Universe {
       this.scene.append(planet.entity);
     });
     this.motionSimulationState = new MotionSimulationState(this);
-    this._state = this.motionSimulationState; // 外からはstateのSetterで変更してもらう。
+    this.directionSelectState = new DirectionSelectState(this);
+    this._state = this.directionSelectState; // 外からはstateのSetterで変更してもらう。
   }
   
   addPlanet(planet){
@@ -163,6 +173,10 @@ class Universe {
 
   update(){
     this.state.update();
+  }
+  
+  playerDrag(ev){
+    this.state.playerDrag(ev);
   }
 }
 
@@ -218,6 +232,11 @@ function main(param) {
     // このシーンで利用するアセットのIDを列挙し、シーンに通知します
     assetIds: ["planet1", "planet2", "sun"]
   });
+  var font = new g.DynamicFont({
+    game: g.game,
+    fontFamily: "sans-serif",
+    size: 48
+  });
   scene.onLoad.add(function () {
     // ここからゲーム内容を記述します
     // 各アセットオブジェクトを取得します
@@ -229,7 +248,7 @@ function main(param) {
     // 惑星を配置
     const astroUnit = PhysicalConstant.AstroUnit;
     const deltaTime = Setting.TimeStepSec;
-    var planet1 = new Planet(40000.0, 6*Math.pow(10.0, 20.0), new Pos(4.0*astroUnit, 4*astroUnit), new Velocity(0,0.003*astroUnit/deltaTime), new Acceleration(0,0));
+    var planet1 = new Planet(40000.0, 6*Math.pow(10.0, 20.0), new Pos(4.0*astroUnit, 4*astroUnit), new Velocity(0,0.0), new Acceleration(0,0));
     var planet2 = new Planet(40000.0, 6*Math.pow(10.0,20), new Pos(7.0*astroUnit, 6.0*astroUnit), new Velocity(0.0,-0.003*astroUnit/deltaTime), new Acceleration(0.0,0.0));
     var planet3 = new Planet(40000.0, 6*Math.pow(10.0,26), new Pos(6.0*astroUnit, 5*astroUnit), new Velocity(0.0,0.0), new Acceleration(0.0,0.0));
 
@@ -237,6 +256,8 @@ function main(param) {
     var planet1ImageAsset = scene.asset.getImageById("planet1");
     var planet2ImageAsset = scene.asset.getImageById("planet2");
     var planet3ImageAsset = scene.asset.getImageById("sun");
+
+    // 惑星１（主人公）
     var planet1Size = Math.max(meterToPx(planet1.radius), 5);
     var player1 = new g.Sprite({
       scene: scene,
@@ -249,6 +270,7 @@ function main(param) {
     });
     planet1.entity = player1;
 
+    // 惑星２
     var planet2Size = Math.max(meterToPx(planet2.radius), 5);
     var player2 = new g.Sprite({
       scene: scene,
@@ -260,6 +282,7 @@ function main(param) {
     });
     planet2.entity = player2;
   
+    // 太陽
     var planet3Size = Math.max(meterToPx(planet3.radius), 5);
     var player3 = new g.Sprite({
       scene: scene,
@@ -272,22 +295,42 @@ function main(param) {
     planet3.entity = player3;
 
     var universe = new Universe(scene, [planet1, planet2, planet3], 10*astroUnit, 10*astroUnit); // 宇宙創造
+  
+    var directionLabel = new g.Label({
+      scene: scene, // g.Sceneの値
+      font: font, // g.Fontの値
+      text: "プレイヤーをタッチして速度をつけよう",
+      fontSize: 20,
+      x: 10,
+      y: 10
+    });
+    scene.append(directionLabel);
 
-
+    // 毎フレームごとの処理
     scene.onUpdate.add(function () {
       universe.update();
       scene.modified();
     });
-    
-    player1.onUpdate.add(function () {
-    });
 
+    // プレイヤーにタッチしたら方向選択モード
     player1.onPointDown.add(function() {
-
+      directionLabel.text = "スワイプして方向を決めよう";
+      directionLabel.invalidate();
+      universe.state = universe.directionSelectState;
     });
 
+    // ドラッグ量に応じて速度を決める
+    player1.onPointMove.add(function(ev) {
+      directionLabel.text = "スワイプして方向を決めよう";
+      directionLabel.invalidate();
+      universe.playerDrag(ev);
+    });
+
+    // マウスを離したらシミュレーション開始
     player1.onPointUp.add(function() {
       universe.state = universe.motionSimulationState;
+      directionLabel.text = "プレイヤーをタッチして速度をつけよう";
+      directionLabel.invalidate();
     });
 
     /*
